@@ -2,6 +2,9 @@
 
 This project is the lab assignments of [MIT Open Course 6.830](http://ocw.mit.edu/courses/electrical-engineering-and-computer-science/6-830-database-systems-fall-2010/assignments/): the implementation of a tiny database management system using the given code skeleton.
 
+## Architecture
+
+![architecture](doc/architecture.jpg)
 
 ## What I Have Done
 
