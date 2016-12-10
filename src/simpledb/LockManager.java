@@ -11,7 +11,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.*;
 
 
-class BufferLock {
+class LockManager {
 	
 	private static final TransactionId NIL_TID = new TransactionId();
 	private static final Random rand = new Random();
@@ -21,7 +21,7 @@ class BufferLock {
 	private final Semaphore[] waits, mutexes, writeMutexes;
 	private final AtomicInteger[] readCnts;
 	
-	public BufferLock(int numPages) {
+	public LockManager(int numPages) {
 		readers = new ConcurrentHashMap<Integer,Set<TransactionId>>();
 		writers = new ConcurrentHashMap<Integer,TransactionId>();
 		waits = new Semaphore[numPages];

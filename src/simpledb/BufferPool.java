@@ -23,7 +23,7 @@ public class BufferPool {
     constructor instead. */
     public static final int DEFAULT_PAGES = 50;
     private final Page[] buffer;
-    public final BufferLock lock;
+    public final LockManager lock;
     private int evictIdx = 0;
     
     /**
@@ -34,7 +34,7 @@ public class BufferPool {
     public BufferPool(int numPages) {
         // Done
     	buffer = new Page[numPages];
-    	lock = new BufferLock(numPages);
+    	lock = new LockManager(numPages);
     }
     
     public static int getPageSize() {
@@ -250,7 +250,7 @@ public class BufferPool {
 
     /** Write all pages of the specified transaction to disk.
      */
-    public synchronized  void flushPages(TransactionId tid) throws IOException {
+    public synchronized void flushPages(TransactionId tid) throws IOException {
         // Done
     	for (int i=0; i<buffer.length; i++) {
     		if (null != buffer[i] && lock.holdsLock(tid, i)) {
