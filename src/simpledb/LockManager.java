@@ -56,7 +56,6 @@ class LockManager {
 		if (!semp.tryAcquire(10+rand.nextInt(50), TimeUnit.MILLISECONDS)) {
 			boolean deadlock = false;
 			
-			//System.out.println(tid+" tryAcquire for the 2nd time");
 			for (int i=0; i<mutexes.length; i++) {
 				if (releaseLock(tid, i)) {
 					deadlock = true;
@@ -78,7 +77,6 @@ class LockManager {
 			throws InterruptedException {
 		if (!holdsWriteLock(tid, idx) && !(Permissions.READ_ONLY == perm
 				&& holdsReadLock(tid, idx))) {
-			//System.out.println("Get "+tid+" "+idx+" "+perm);
 			tryAcquire(tid, waits[idx]);
 			if (Permissions.READ_ONLY == perm) {
 				if (0 == readCnts[idx].getAndIncrement()) {
@@ -92,25 +90,20 @@ class LockManager {
 				writers.put(idx, tid);
 			}
 			waits[idx].release();
-			//System.out.println("get "+tid+" "+idx+" "+perm);
 		}
 	}
 	
 	public boolean releaseLock(TransactionId tid, int idx) {
 		if (holdsReadLock(tid, idx)) {
-			//System.out.println("Release "+tid+" "+idx);
 			readers.get(idx).remove(tid);
 			if (0 == readCnts[idx].decrementAndGet()) {
 				mutexes[idx].release();
 			}
-			//System.out.println("release "+tid+" "+idx);
 			return true;
 		} else if (holdsWriteLock(tid, idx)) {
-			//System.out.println("Release "+tid+" "+idx);
 			writers.put(idx, NIL_TID);
 			mutexes[idx].release();
 			writeMutexes[idx].release();
-			//System.out.println("release "+tid+" "+idx);
 			return true;
 		} else {
 			return false;

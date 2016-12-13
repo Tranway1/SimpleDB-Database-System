@@ -9,15 +9,13 @@ This project is the lab assignments of [MIT Open Course 6.830](http://ocw.mit.ed
 ## What I Have Done
 
 Up to now, I have accomplished 4 out of the 5 lab assignments, and a naive RDBMS has come into being.
-* By doing [Lab 1](http://db.csail.mit.edu/6.830/assignments/lab1.html), I implemented the core modules of the storage system.
-* By doing [Lab 2](http://db.csail.mit.edu/6.830/assignments/lab2.html), I added support for various query processing operators and consummated the storage system.
+* By doing [Lab 1](http://db.csail.mit.edu/6.830/assignments/lab1.html), I implemented the core modules of a permanent storage manager.
+* By doing [Lab 2](http://db.csail.mit.edu/6.830/assignments/lab2.html), I added support for various query processing operators and consummated the storage manager.
 * By doing [Lab 3](http://db.csail.mit.edu/6.830/assignments/lab3.html), I added the concurrency control by implementing strict 2PL and NO STEAL/FORCE policy.
-* By doing [Lab 5](http://db.csail.mit.edu/6.830/assignments/lab5.html), I implemented log-based rollback for aborts and log-based crash recovery.
+* By doing [Lab 5](http://db.csail.mit.edu/6.830/assignments/lab5.html), I implemented log-based rollback (for aborts) and crash recovery.
 
 The four lab assignments above were finished in my spare time within one week.
-Actually, a lot of time was spent on concurrency debugging and deadlock handling.
-
-Due to a tight schedule, I am unable to finish Lab 4 (query optimization) for the time being.
+Due to a tight schedule, I was unable to finish Lab 4 (query optimization) for the time being.
 I hope this could be done in the future.
 
 ## Build and Run Tests
