@@ -1,113 +1,165 @@
-/**
- * @author Nan Zuo (devinz1993.github.io)
- */
+/** @author Nan Zuo (devinz1993.github.io) */
 
 package simpledb;
 
-import java.util.Collections;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Random;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.*;
+import java.util.Timer;
+import java.util.TimerTask;
+import java.util.Vector;
 
 
 class LockManager {
 	
-	private static final TransactionId NIL_TID = new TransactionId();
-	private static final Random rand = new Random();
-	
-	private final ConcurrentMap<Integer,Set<TransactionId>> readers;
-	private final ConcurrentMap<Integer,TransactionId> writers;
-	private final Semaphore[] waits, mutexes, writeMutexes;
-	private final AtomicInteger[] readCnts;
+	private final Object[] mutexes;
+	private final List<Set<TransactionId>> readLockHolders;
+	private final List<TransactionId> writeLockHolders;
+	private final int[] writers;	/* number of writers waiting or working */
+	private final Random rand = new Random();
+	private final int MIN_TIME = 100, MAX_TIME = 1000;
 	
 	public LockManager(int numPages) {
-		readers = new ConcurrentHashMap<Integer,Set<TransactionId>>();
-		writers = new ConcurrentHashMap<Integer,TransactionId>();
-		waits = new Semaphore[numPages];
-		mutexes = new Semaphore[numPages];
-		writeMutexes = new Semaphore[numPages];
-		readCnts = new AtomicInteger[numPages];
-		for  (int i=0; i<numPages; i++) {
-			readers.put(i, Collections.newSetFromMap
-					(new ConcurrentHashMap<TransactionId,Boolean>()));
-			writers.put(i, NIL_TID);
-			waits[i] = new Semaphore(1);
-			mutexes[i] = new Semaphore(1);
-			writeMutexes[i] = new Semaphore(1);
-			readCnts[i] = new AtomicInteger(0);
+		mutexes = new Object[numPages];
+		readLockHolders = new Vector<Set<TransactionId>>(numPages);
+		writeLockHolders = new Vector<TransactionId>(numPages);
+		for (int i=0; i<numPages; i++) {
+			mutexes[i] = new Object();
+			readLockHolders.add(new HashSet<TransactionId>());
+			writeLockHolders.add(null);
+		}
+		writers = new int[numPages];
+	}
+	
+	private boolean holdsReadLock(TransactionId tid, int idx) {
+		synchronized(mutexes[idx]) {
+			return readLockHolders.get(idx).contains(tid);
 		}
 	}
 	
-	private synchronized boolean holdsReadLock(TransactionId tid, int idx) {
-		return readers.get(idx).contains(tid);
+	private boolean holdsWriteLock(TransactionId tid, int idx) {
+		synchronized(mutexes[idx]) {
+			return tid.equals(writeLockHolders.get(idx));
+		}
 	}
 	
-	private synchronized boolean holdsWriteLock(TransactionId tid, int idx) {
-		return tid.equals(writers.get(idx));
+	public boolean isHolding(TransactionId tid, int idx) {
+		return holdsWriteLock(tid, idx) || holdsReadLock(tid, idx);
 	}
 	
-	public synchronized boolean holdsLock(TransactionId tid, int idx) {
-		return holdsReadLock(tid, idx) || holdsWriteLock(tid, idx);
-	}
-	
-	private void tryAcquire(TransactionId tid, Semaphore semp, Semaphore... owneds) 
+	private void acquireReadLock(TransactionId tid, int idx)
 			throws InterruptedException {
-		if (!semp.tryAcquire(10+rand.nextInt(50), TimeUnit.MILLISECONDS)) {
-			boolean deadlock = false;
-			
-			for (int i=0; i<mutexes.length; i++) {
-				if (releaseLock(tid, i)) {
-					deadlock = true;
+		// System.out.println(tid.myid+" wants to read "+idx);
+		if (!isHolding(tid, idx)) {
+			synchronized(mutexes[idx]) {
+				final Thread thread = Thread.currentThread();
+				final Timer timer = new Timer(true);
+				
+				timer.schedule(new TimerTask() {
+					@Override public void run() {
+						thread.interrupt();
+					}
+				}, MIN_TIME+rand.nextInt(MAX_TIME-MIN_TIME));
+				while (0 != writers[idx]) {
+					mutexes[idx].wait();
 				}
-			}
-			if (deadlock) {
-				System.err.println("DEADLOCK");
-				for (Semaphore owned : owneds) {
-					owned.release();
-				}
-				throw new InterruptedException("deadlock detected by "+tid);
-			} else {
-				semp.acquire();
+				readLockHolders.get(idx).add(tid);
+				timer.cancel();
 			}
 		}
+		// System.out.println(tid.myid+" gets to read "+idx);
 	}
 	
-	public void getLock(TransactionId tid, int idx, Permissions perm) 
-			throws InterruptedException {
-		if (!holdsWriteLock(tid, idx) && !(Permissions.READ_ONLY == perm
-				&& holdsReadLock(tid, idx))) {
-			tryAcquire(tid, waits[idx]);
-			if (Permissions.READ_ONLY == perm) {
-				if (0 == readCnts[idx].getAndIncrement()) {
-					tryAcquire(tid, mutexes[idx], writeMutexes[idx], waits[idx]);
-				}
-				readers.get(idx).add(tid);
-			} else {
-				tryAcquire(tid, writeMutexes[idx], waits[idx]);
-				releaseLock(tid, idx);
-				tryAcquire(tid, mutexes[idx], writeMutexes[idx], waits[idx]);
-				writers.put(idx, tid);
-			}
-			waits[idx].release();
-		}
-	}
-	
-	public boolean releaseLock(TransactionId tid, int idx) {
-		if (holdsReadLock(tid, idx)) {
-			readers.get(idx).remove(tid);
-			if (0 == readCnts[idx].decrementAndGet()) {
-				mutexes[idx].release();
-			}
-			return true;
-		} else if (holdsWriteLock(tid, idx)) {
-			writers.put(idx, NIL_TID);
-			mutexes[idx].release();
-			writeMutexes[idx].release();
-			return true;
+	private boolean releaseReadLock(TransactionId tid, int idx) {
+		if (!holdsReadLock(tid, idx)) {
+			return false;
 		} else {
+			synchronized(mutexes[idx]) {
+				readLockHolders.get(idx).remove(tid);
+				if (readLockHolders.get(idx).isEmpty()) {
+					mutexes[idx].notifyAll();
+				}
+			}
+			// System.out.println(tid.myid+" ceases to read "+idx);
+			return true;
+		}
+	}
+	
+	private boolean hasOtherReader(TransactionId tid, int idx) {
+		synchronized(mutexes[idx]) {
+			for (TransactionId otherTid : readLockHolders.get(idx)) {
+				if (!otherTid.equals(tid)) {
+					return true;
+				}
+			}
 			return false;
 		}
+	}
+	
+	private void acquireWriteLock(TransactionId tid, int idx) 
+			throws InterruptedException {
+		// System.out.println(tid.myid+" wants to write "+idx);
+		if (!holdsWriteLock(tid, idx)) {
+			synchronized(mutexes[idx]) {
+				final Thread thread = Thread.currentThread();
+				final Timer timer = new Timer(true);
+				
+				writers[idx]++;
+				timer.schedule(new TimerTask() {
+					@Override public void run() {
+						thread.interrupt();
+					}
+				}, MIN_TIME+rand.nextInt(MAX_TIME-MIN_TIME));
+				while (hasOtherReader(tid, idx) || null != writeLockHolders.get(idx)) {
+					mutexes[idx].wait();
+				}
+				readLockHolders.get(idx).remove(tid);
+				writeLockHolders.set(idx, tid);
+				timer.cancel();
+			}
+		}
+		// System.out.println(tid.myid+" gets to write "+idx);
+	}
+	
+	private boolean releaseWriteLock(TransactionId tid, int idx) {
+		if (!holdsWriteLock(tid, idx)) {
+			return false;
+		} else {
+			synchronized(mutexes[idx]) {
+				writeLockHolders.set(idx, null);
+				writers[idx]--;
+				mutexes[idx].notifyAll();
+			}
+			// System.out.println(tid.myid+" ceases to write "+idx);
+			return true;
+		}
+	}
+	
+	public void acquire(TransactionId tid, int idx, Permissions perm) 
+			throws InterruptedException {
+		try {
+			if (perm.equals(Permissions.READ_ONLY)) {
+				acquireReadLock(tid, idx);
+			} else {
+				acquireWriteLock(tid, idx);
+			}
+			return;
+		} catch (InterruptedException e) {
+			for (int j=0; j<mutexes.length; j++) {
+				release(tid, j);
+			}
+			if (!perm.equals(Permissions.READ_ONLY)) {
+				synchronized(mutexes[idx]) {
+					writers[idx]--;
+				}
+			}
+			throw new InterruptedException("DEADLOCK DETECTED");
+		}
+	}
+	
+	public boolean release(TransactionId tid, int idx) {
+		return releaseWriteLock(tid, idx) || releaseReadLock(tid, idx);
 	}
 	
 }
